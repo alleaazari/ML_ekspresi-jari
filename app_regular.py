@@ -51,8 +51,13 @@ COLOR_GRAY   = (120, 120, 120)
 def load_model_and_meta(model_dir: str):
     meta_path = Path(model_dir) / 'metadata.json'
     if not meta_path.exists():
-        print(f'[ERROR] metadata.json tidak ditemukan di {model_dir}')
-        sys.exit(1)
+        nested_path = Path(model_dir) / 'ml_output'
+        if (nested_path / 'metadata.json').exists():
+            model_dir = str(nested_path)
+            meta_path = nested_path / 'metadata.json'
+        else:
+            print(f'[ERROR] metadata.json tidak ditemukan di {model_dir}')
+            sys.exit(1)
 
     with open(meta_path) as f:
         meta = json.load(f)
@@ -172,10 +177,23 @@ def predict_frame(img_rgb: np.ndarray, model, meta: dict, class_names: list):
     """Return (pred_class, confidence, all_probs_dict)."""
     img_size = tuple(meta['img_size'])
     is_dl    = meta['is_dl']
+    algo     = meta.get('algorithm', 'MobileNetV2')
 
     if is_dl:
-        img = cv2.resize(img_rgb, img_size).astype('float32') / 255.0
-        probs    = model.predict(img[np.newaxis], verbose=0)[0]
+        img = cv2.resize(img_rgb, img_size).astype('float32')
+        if algo == 'MobileNetV2':
+            import tensorflow as tf
+            img_proc = tf.keras.applications.mobilenet_v2.preprocess_input(img)
+        elif algo == 'ResNet50':
+            import tensorflow as tf
+            img_proc = tf.keras.applications.resnet50.preprocess_input(img)
+        elif algo == 'EfficientNetB0':
+            import tensorflow as tf
+            img_proc = tf.keras.applications.efficientnet.preprocess_input(img)
+        else:
+            img_proc = img / 255.0
+
+        probs    = model.predict(img_proc[np.newaxis], verbose=0)[0]
         pred_idx = int(np.argmax(probs))
         return (
             class_names[pred_idx],
@@ -292,7 +310,14 @@ def save_screenshot(frame: np.ndarray, save_dir: str, pred_class: str):
 # ─────────────────────────────────────────────
 def run_webcam(model, meta, class_names, camera_index=0):
     print('\n[WEBCAM] Membuka kamera...')
-    cap = cv2.VideoCapture(camera_index)
+    # Gunakan DirectShow (CAP_DSHOW) di Windows agar webcam USB terbuka lebih cepat dan tidak hang
+    if os.name == 'nt':
+        cap = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
+        if not cap.isOpened():
+            cap = cv2.VideoCapture(camera_index)
+    else:
+        cap = cv2.VideoCapture(camera_index)
+
     if not cap.isOpened():
         print('[ERROR] Kamera tidak bisa dibuka!')
         return

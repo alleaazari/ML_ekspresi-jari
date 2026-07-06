@@ -38,9 +38,15 @@ MODEL_DIR = './ml_output'   # folder hasil training dari Colab
 # ─────────────────────────────────────────────
 @st.cache_resource
 def load_model_and_meta():
+    global MODEL_DIR
     meta_path = Path(MODEL_DIR) / 'metadata.json'
     if not meta_path.exists():
-        return None, None, None
+        nested_path = Path(MODEL_DIR) / 'ml_output'
+        if (nested_path / 'metadata.json').exists():
+            MODEL_DIR = str(nested_path)
+            meta_path = nested_path / 'metadata.json'
+        else:
+            return None, None, None
 
     with open(meta_path) as f:
         meta = json.load(f)
@@ -110,11 +116,22 @@ def load_model_and_meta():
     return model, meta, class_names
 
 
-def preprocess_image(img_rgb: np.ndarray, img_size: tuple, is_dl: bool):
+def preprocess_image(img_rgb: np.ndarray, img_size: tuple, algo: str, is_dl: bool):
     """Resize + normalize gambar untuk inferensi."""
     img = cv2.resize(img_rgb, img_size)
     if is_dl:
-        return img.astype('float32') / 255.0
+        img_float = img.astype('float32')
+        if algo == 'MobileNetV2':
+            import tensorflow as tf
+            return tf.keras.applications.mobilenet_v2.preprocess_input(img_float)
+        elif algo == 'ResNet50':
+            import tensorflow as tf
+            return tf.keras.applications.resnet50.preprocess_input(img_float)
+        elif algo == 'EfficientNetB0':
+            import tensorflow as tf
+            return tf.keras.applications.efficientnet.preprocess_input(img_float)
+        else:
+            return img_float / 255.0
     else:
         return img
 
@@ -133,9 +150,10 @@ def predict(img_rgb: np.ndarray, model, meta: dict, class_names: list):
     """Jalankan prediksi dan return class + probabilities."""
     img_size = tuple(meta['img_size'])
     is_dl    = meta['is_dl']
+    algo     = meta.get('algorithm', 'MobileNetV2')
 
     if is_dl:
-        img_proc = preprocess_image(img_rgb, img_size, is_dl=True)
+        img_proc = preprocess_image(img_rgb, img_size, algo, is_dl=True)
         probs = model.predict(img_proc[np.newaxis], verbose=0)[0]
         pred_idx   = int(np.argmax(probs))
         pred_class = class_names[pred_idx]
