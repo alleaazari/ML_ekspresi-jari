@@ -2,20 +2,13 @@
   "algorithm": "MobileNetV2",
   "is_dl": true,
   "class_names": [
-    "0",
-    "1",
-    "2",
-    "3",
-    "4",
-    "5",
-    "Happy",
     "hijab",
     "nonhijab"
   ],
-  "num_classes": 9,
+  "num_classes": 2,
   "img_size": [
-    128,
-    128
+    224,
+    224
   ],
-  "accuracy": 0.1433333307504654
+  "accuracy": 0.9805825242718447
 }
